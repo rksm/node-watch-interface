@@ -1,0 +1,24 @@
+{
+  "name": "file-watcher",
+  "version": "0.0.1",
+  "description": "Recursively gather file meta data starting at a root directory. When files change the meta data gets automatically updated. It is thin wrapper for 'watch' that takes care of file meta object housekeeping.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node_modules/nodeunit/bin/nodeunit tests/test.js  --reporter minimal"
+  },
+  "keywords": [
+    "watch",
+    "utility",
+    "fs"
+  ],
+  "author": "Robert Krahn",
+  "license": "MIT",
+  "dependencies": {
+    "async": "~0.2",
+    "watch": "~0.8"
+  },
+  "devDependencies": {
+    "nodeunit": "~0.8",
+    "lively-fs-helper": "https://github.com/rksm/lively-fs-helper/tarball/master"
+  }
+}
