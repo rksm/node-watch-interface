@@ -2,7 +2,6 @@ var path  = require("path");
 var util  = require("util");
 var watch = require("watch");
 
-var watchState = {};
 var debug = true;
 
 function log(/*args*/) {
@@ -21,63 +20,64 @@ function ignore(baseDirectory, ignoredItems, fullPath) {
   return false;
 }
 
-function addChange(baseDirectory, changeRecord, type, fullFileName, stat) {
+function addChange(watchState, baseDirectory, type, fullFileName, stat) {
   log('change recorded: %s to %s -- %s', type, fullFileName, Date.now());
   var fileName = path.relative(baseDirectory, fullFileName);
-  changeRecord.lastChange = Date.now()
-  changeRecord.changeList.unshift({
-    time: changeRecord.lastChange,
+  watchState.lastChange = Date.now()
+  watchState.changeList.unshift({
+    time: watchState.lastChange,
     path: fileName,
     type: type,
     stat: stat
   });
 }
 
-function startWatching(dir, options, thenDo) {
+function startWatching(watchState, dir, options, thenDo) {
   options = options || {}
-  function nullRemoveFileChangeListeners(thenDo) { thenDo && thenDo(null); }
   var watchOptions = {
-      ignoreDotFiles: options.ignoreDotFiles || false,
-      filter: ignore.bind(null, dir, options.excludes || [])
-    },
-    changes = watchState[dir] = {
-      monitor: null,
-      lastChange: null,
-      startTime: null,
-      changeList: [],
-      removeFileChangeListeners: nullRemoveFileChangeListeners
-    };
-  if (!watch) { thenDo({error: 'watch not available!'}, changes); return changes; }
+    ignoreDotFiles: options.ignoreDotFiles || false,
+    filter: ignore.bind(null, dir, options.excludes || [])
+  }
   watch.createMonitor(dir, watchOptions, function (monitor) {
-    changes.startTime = changes.lastChange = Date.now();
-    changes.monitor = monitor;
-    function creationListener(f, stat) { addChange(dir, changes, 'creation', f, stat); }
-    function changeListener(f, curr, prev) { addChange(dir, changes, 'change', f, curr); }
-    function removalListener(f, stat) { addChange(dir, changes, 'removal', f); }
+    watchState.startTime = watchState.lastChange = Date.now();
+    watchState.monitor = monitor;
+    function creationListener(f, stat) { addChange(watchState, dir, 'creation', f, stat); }
+    function changeListener(f, curr, prev) { addChange(watchState, dir, 'change', f, curr); }
+    function removalListener(f, stat) { addChange(watchState, dir, 'removal', f); }
     monitor.on("created", creationListener);
     monitor.on("changed", changeListener);
     monitor.on("removed", removalListener);
-    changes.removeFileChangeListeners = function(thenDo) {
+    watchState.removeFileChangeListeners = function(thenDo) {
         monitor.removeListener("created", creationListener);
         monitor.removeListener("changed", changeListener);
         monitor.removeListener("removed", removalListener);
-        changes.removeFileChangeListeners = nullRemoveFileChangeListeners;
-        delete watchState[dir];
+        watchState.removeFileChangeListeners = function(thenDo) { thenDo && thenDo(null); };
         thenDo && thenDo(null);
     }
-    thenDo(null, changes);
+    thenDo(null, watchState);
   });
-  return changes;
+  return watchState;
 }
 
-function ensureWatchState(dir, options, thenDo) {
-  if (watchState[dir]) thenDo(null, watchState[dir])
-  else startWatching(dir, options, thenDo);
+function createWatchState() {
+  return {
+    monitor: null,
+    lastChange: null,
+    startTime: null,
+    changeList: [],
+    removeFileChangeListeners: function(thenDo) { thenDo && thenDo(null); }
+  };
 }
 
-function getChangesSince(dir, options, timestampSince, timestampStart, thenDo) {
+function ensureWatchState(watchState, dir, options, thenDo) {
+  if (!watchState) watchState = createWatchState();
+  if (!watchState.monitor) startWatching(watchState, dir, options, thenDo)
+  else thenDo(null, watchState)
+}
+
+function getChangesSince(watchState, dir, options, timestampSince, timestampStart, thenDo) {
   timestampSince = timestampSince || 0;
-  ensureWatchState(dir, options, function(err, watchState) {
+  ensureWatchState(watchState, dir, options, function(err, watchState) {
     if (!err && timestampStart && timestampStart !== watchState.startTime) {
       err = {error: 'Start time does not match! ' + timestampStart + ' vs ' +  watchState.startTime};
     }
@@ -103,31 +103,28 @@ function makeMonitorFilesRelative(baseDirectory, monitor) {
     return relativeFileObj;
 }
 
-function getWatchedFiles(dir, options, thenDo) {
+function getWatchedFiles(watchState, dir, options, thenDo) {
   if (!watch) { thenDo({error: 'watch not available'}, {}, null); return; }
-  ensureWatchState(dir, options, function(err, watchState) {
+  ensureWatchState(watchState, dir, options, function(err, watchState) {
     thenDo(err, makeMonitorFilesRelative(dir, watchState.monitor), watchState);
   });
 }
 
-function close(dir, thenDo) {
-  // w.monitor.removeAllListeners(type)
-}
-
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// todo isolate watch state
+var watchStates = module.exports.watchStates = {/*dir -> watchstate*/}
+
 module.exports.on = function(directory, options, thenDo) {
-  getWatchedFiles(directory, options, function(err, fileSpec, watchState) {
+  getWatchedFiles(watchStates[directory], directory, options, function(err, fileSpec, watchState) {
     var watcher = {
-      startTime: watchState.startTime,
-      monitor: watchState.monitor,
+      state: watchState,
       getWatchedFiles: function(callback) {
-        getWatchedFiles(directory, options, callback);
+        getWatchedFiles(watchState, directory, options, callback);
       },
       getChangesSince: function(since, callback) {
-        getChangesSince(directory, options, since, watchState.startTime, callback);
+        getChangesSince(watchState, directory, options, since, watchState.startTime, callback);
       },
       close: function(thenDo) {
+        delete watchStates[directory];
         watchState.removeFileChangeListeners(thenDo);
       }
     }
