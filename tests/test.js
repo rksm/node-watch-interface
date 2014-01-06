@@ -4,7 +4,6 @@ var path          = require("path"),
     fsHelper      = require("lively-fs-helper"),
     fileWatcher   = require("../index"),
     baseDirectory = __dirname,
-    baseDirectory = "/Users/i834382/test/",
     testDirectory = path.join(baseDirectory, "testDir"),
                     currentWatcher;
 
@@ -90,7 +89,7 @@ var tests = {
           test.ifError(err); currentWatcher = w; next();
         });
       },
-      function(next) { setTimeout(next, 1000);},
+      function(next) { setTimeout(next, 1000); },
       function(next) { fs.writeFile(path.join(testDirectory, 'file1.js'), 'fooooo', next); },
       function waitForChange(next) {
         currentWatcher.getChangesSince(startTime, function(err, c, _) {
@@ -105,9 +104,9 @@ var tests = {
         });
       },
       function(next) {
-        currentWatcher.getWatchedFiles(function(err, fileInfos, startTime) {
+        currentWatcher.getWatchedFiles(function(err, fileInfos, watchState) {
           test.ok(fileInfos["file2.js"].mtime < startTime, 'unmodified file has newer mod date?');
-          test.ok(+fileInfos["file1.js"].mtime > startTime, 'modification not picked up?');
+          test.ok(fileInfos["file1.js"].mtime > startTime, 'modification not picked up?');
           next();
         });
       }
