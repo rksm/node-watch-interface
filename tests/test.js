@@ -13,6 +13,8 @@ function logProgress(msg) {
   return function(thenDo) { console.log(msg); thenDo && thenDo(); }
 }
 
+function await(ms) { return function(next) { setTimeout(next, ms); }; }
+
 function assertAllIncluded(test, array1, array2, msg) {
   msg = msg || '';
   var failed = false;
@@ -90,7 +92,7 @@ var tests = {
           currentWatcher = w; next();
         });
       },
-      function(next) { setTimeout(next, 200); },
+      await(200),
       function(next) { fs.writeFile(path.join(testDirectory, 'file1.js'), 'fooooo', next); },
       function waitForChange(next) {
         currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
@@ -151,7 +153,7 @@ var tests = {
           test.ifError(err); currentWatcher = w; next();
         });
       },
-      function(next) { setTimeout(next, 200); },
+      await(200),
       function(next) { fs.writeFile(path.join(testDirectory, 'newFile.txt'), 'fooo', next); },
       function waitForChange(next) {
         currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
@@ -175,7 +177,49 @@ var tests = {
         });
       }
     ], test.done);
-  }
+  },
+
+  testJustWatchFiles: function(test) {
+    var startTime = Date.now(), timeout = 30*1000;
+    async.series([
+      function(next) {
+        fileWatcher.onFiles(testDirectory, ["file1.js", "some-folder/file3.js"], {}, function(err, w) {
+          test.ifError(err); currentWatcher = w; next(); });
+      },
+      await(100),
+      // 1. ignore changes to non watched files
+      function(next) { fs.writeFile(path.join(testDirectory, 'file2.js'), 'fooo', next); },
+      await(300),
+      function waitForChange(next) {
+        currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
+          test.ifError(err);
+          test.equals(changes.length, 0, 'change to non watched file observed?');
+          next();
+        });
+      },
+      // 2. Changes to watched files should be picked up
+      function(next) { fs.writeFile(path.join(testDirectory, 'file1.js'), 'fooo', next); },
+      await(300),
+      function waitForChange(next) {
+        currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
+          test.ifError(err);
+          test.equals(changes.length, 1, 'change to watched file not observed?');
+          next();
+        });
+      },
+      // 3. Newly added files should be ignored
+      function(next) { fs.writeFile(path.join(testDirectory, 'file3.js'), 'fooo', next); },
+      await(300),
+      function waitForChange(next) {
+        currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
+          test.ifError(err);
+          test.equals(changes.length, 1, 'change of newly added file not ignored?');
+          next();
+        });
+      },
+    ], test.done);
+    
+},
 
 };
 

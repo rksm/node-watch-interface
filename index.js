@@ -128,6 +128,7 @@ function startWatching(watchState, dir, options, thenDo) {
 
       // 2. register event listeners
       gazer.on('all'/*changed/added/deleted*/, function(evtType, filepath) {
+        if (ignore(dir, options.excludes, filepath)) return;
         addChange(watchState, dir, gazerEventTranslation[evtType] || 'unknown', filepath, {});
       });
       gazer.on('ready', function(err) { log('READY?'); })
@@ -212,4 +213,17 @@ module.exports.on = function(directory, options, thenDo) {
     }
     thenDo(err, watcher);
   });
+}
+
+module.exports.onFiles = function(directory, files, options, thenDo) {
+  // FIXME this implementation is just a hack: First we start watchign the
+  // entire directory, then we remove all files that aren't in files.
+  // It would be better to directly use the gaze interface to start watching
+  // only on the given files
+  options = options || {};
+  options.excludes = options.excludes || [];
+  // exclude files not in `files`
+  options.excludes.push(function(file) {
+    return files.indexOf(file) === -1; });
+  module.exports.on(directory, options, thenDo);
 }

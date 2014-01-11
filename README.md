@@ -17,6 +17,10 @@ Starts watching a directory recursively.
     match if the particular file should be ignored.
 - `callback`: gets err object and a `gazer`
 
+### `require('watch-interface').onFiles(directory, listOfFiles, options, callback)`
+
+Like on but ignore all files except those that are in the list.
+
 ### `gazer.state`
 
 - object with the fields
