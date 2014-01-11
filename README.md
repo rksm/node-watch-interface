@@ -1,14 +1,9 @@
 # watch-interface
 
 Recursively gather file meta data starting at a root directory. When files
-change the meta data gets automatically updated. It is thin wrapper for 'watch'
-that takes care of file meta object housekeeping.
-
-The motivation for creating this project is to have an interface that wraps
-mikeal's watch module which works fine but depends on the deperecated
-`fs.watchFile` API and is slow. Once `fs.watch` becomes more stable I'll switch
-to base this module on the new interface. Code depending on this module will
-hopefully not have to change.
+change the meta data gets automatically updated. It is thin wrapper for [gaze](https://github.com/shama/gaze)
+that takes care of some housekeeping and provides a non-changing interface when
+we change the watching backend.
 
 ## Usage
 
@@ -18,47 +13,36 @@ Starts watching a directory recursively.
 
 - `directory`: String, root of what should be watched
 - `options`: Object with
-  - `ignoreDotFiles`: Bool, whether to filter out files and directories starting with a `.`
   - `exclude`: Array of strings, regular expressions or functions that should
     match if the particular file should be ignored.
-- `callback`: gets err object and a `watcher`
+- `callback`: gets err object and a `gazer`
 
-### `watcher.state`
+### `gazer.state`
 
 - object with the fields
-  - `monitor`: monitor object from the watch module
+  - `monitor`: gazer object from the `gaze` module
   - `lastChange`: Date
   - `startTime`: Date
-  - `changeList`: list of changes accrued since `startTime`
+  - `changeList`: list of changes accrued since `startTime`, having the fields:
+      - `time`
+      - `path`
+      - `type`: one of `["creation", "removal", "change"]`
 
-### `watcher.getWatchedFiles(callback)`
+### `gazer.getWatchedFiles(callback)`
 
 Retrieve all the files being watched.
 
-- `callback` is called with an error object and `{files: {PATHSTRING: FILESTAT}, startTime: NUMBER}`
-  - file stat is stat object used by node.js fs with fields
-    - dev
-    - mode
-    - nlink
-    - uid
-    - gid
-    - rdev
-    - blksize
-    - ino
-    - size
-    - blocks
-    - atime
-    - mtime
-    - ctime
+- `callback` is called with an error object and and array of files (file paths,
+  relative to the base directory being watched)
 
-### `watcher.getChangesSince(date, callback)`
+### `gazer.getChangesSince(date, callback)`
 
 Retrieve what changes happened since a given time.
 
 - `date`: Request changes since. Date object or Number specifying a data. If null, returns all changes observed.
-- `callback` is called with two args: `err` and `[{time,path,type,stat}]` with type one of `['removal', 'creation', 'change']`
+- `callback` is called with two args: `err` and `[{time,path,type}]` with type one of `['removal', 'creation', 'change']`
 
-### `watcher.close(callback)`
+### `gazer.close(callback)`
 
 Stop watching.
 
