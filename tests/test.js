@@ -4,7 +4,7 @@ var path          = require("path"),
     fsHelper      = require("lively-fs-helper"),
     fileWatcher   = require("../index"),
     baseDirectory = __dirname,
-    testDirectory = path.join(baseDirectory, "testDir"),
+    testDirectory = path.join(baseDirectory, "testDir/"),
                     currentWatcher;
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -19,15 +19,15 @@ function assertAllIncluded(test, array1, array2, msg) {
   for (var i = 0; i < array1.length; i++) {
     var item = array1[i];
     if (-1 === array2.indexOf(item)) {
-      failed = true;
-      test.ok(false, 'item ' + i + ' of first array not in second. ' + msg);
+      test.ok(false, 'item ' + i + ' = ' + item + ' of first array not in second. ' + msg);
+      return;
     }
   }
   for (var i = 0; i < array2.length; i++) {
     var item = array2[i];
     if (-1 === array2.indexOf(item)) {
-      failed = true;
-      test.ok(false, 'item ' + i + ' of second array not in first. ' + msg);
+      test.ok(false, 'item ' + i + ' = ' + item + ' of second array not in first. ' + msg);
+      return;
     }
   }
   if (!failed) test.ok('all included');
@@ -66,12 +66,11 @@ var tests = {
   },
 
   testStartWatchingAndRetrieveFileInfos: function(test) {
-    fileWatcher.on(testDirectory, {excludes: ["file3.js"]}, function(err, watcher) {
+    fileWatcher.on(testDirectory, {excludes: ["some-folder/file3.js"]}, function(err, watcher) {
       currentWatcher = watcher;
       test.ifError(err);
-      watcher.getWatchedFiles(function(err, fileInfos, startTime) {
-        var files = Object.keys(fileInfos),
-            expected = ['file1.js', 'file2.js','some-folder', 'some-folder/file4.js', '.'];
+      watcher.getWatchedFiles(function(err, files, startTime) {
+        var expected = ['file1.js', 'file2.js','some-folder', 'some-folder/file4.js', '.'];
         assertAllIncluded(test, expected, files);
         test.done();
       });
@@ -82,31 +81,96 @@ var tests = {
     // this test checks if file changes are automatically observed. Since the
     // watcher has a rather coarse granularity we have to wait for several seconds
     var startTime = Date.now(),
-        timeout = 30*1000, changes;
+        timeout = 3*1000, lastChangeBefore;
     async.series([
       function(next) {
-        fileWatcher.on(testDirectory, {excludes: ["file3.js"]}, function(err, w) {
+        fileWatcher.on(testDirectory, {excludes: ["some-folder/file3.js"]}, function(err, w) {
+          test.ifError(err);
+          lastChangeBefore = w.state.lastChange;
+          currentWatcher = w; next();
+        });
+      },
+      function(next) { setTimeout(next, 200); },
+      function(next) { fs.writeFile(path.join(testDirectory, 'file1.js'), 'fooooo', next); },
+      function waitForChange(next) {
+        currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
+          if /*timeout*/(Date.now()-startTime > timeout) { test.ok(false, 'timeout when waiting for file changes to be found'); test.done(); }
+          else if /*no changes yet*/(!changes.length && !err) { console.log('waiting....'); setTimeout(waitForChange.bind(null, next), 200); }
+          else {
+            test.ifError(err);
+            test.ok(watchState.lastChange > lastChangeBefore, 'modification not picked up?');
+            test.equals(changes.length, 1, 'more then one change');
+            test.equals(changes[0].path, 'file1.js', 'path');
+            test.equals(changes[0].type, 'change', 'type');
+            next();
+          }
+        });
+      }
+    ], test.done);
+  },
+
+  testRemoval: function(test) {
+    var startTime = Date.now(), timeout = 3*1000;
+    async.series([
+      function(next) {
+        fileWatcher.on(testDirectory, {excludes: ["some-folder/file3.js"]}, function(err, w) {
           test.ifError(err); currentWatcher = w; next();
         });
       },
-      function(next) { setTimeout(next, 1000); },
-      function(next) { fs.writeFile(path.join(testDirectory, 'file1.js'), 'fooooo', next); },
+      function(next) { setTimeout(next, 200); },
+      function(next) { fs.unlink(path.join(testDirectory, 'file1.js'), next); },
       function waitForChange(next) {
-        currentWatcher.getChangesSince(startTime, function(err, c, _) {
-          changes = c;
-          if (Date.now()-startTime > timeout) {
-            test.ok(false, 'timeout when waiting for file changes to be found');
-            test.done();
-          } else if (!changes.length && !err) {
-            console.log('waiting....');
-            setTimeout(waitForChange.bind(null, next), 1000);
-          } else { test.ifError(err); next(); }
+        currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
+          if /*timeout*/(Date.now()-startTime > timeout) { test.ok(false, 'timeout when waiting for file changes to be found'); test.done(); }
+          else if /*no changes yet*/(!changes.length && !err) { console.log('waiting....'); setTimeout(waitForChange.bind(null, next), 200); }
+          else {
+            test.ifError(err);
+            test.equals(changes.length, 1, 'more then one change');
+            test.equals(changes[0].path, 'file1.js', 'path');
+            test.equals(changes[0].type, 'removal', 'type');
+            next();
+          }
         });
       },
       function(next) {
-        currentWatcher.getWatchedFiles(function(err, fileInfos, watchState) {
-          test.ok(fileInfos["file2.js"].mtime < startTime, 'unmodified file has newer mod date?');
-          test.ok(fileInfos["file1.js"].mtime > startTime, 'modification not picked up?');
+        currentWatcher.getWatchedFiles(function(err, files, watchState) {
+          test.ifError(err);
+          var expected = ['file2.js','some-folder', 'some-folder/file4.js', '.'];
+          assertAllIncluded(test, expected, files);
+          next();
+        });
+      }
+    ], test.done);
+  },
+
+  testCreation: function(test) {
+    var startTime = Date.now(), timeout = 30*1000;
+    async.series([
+      function(next) {
+        fileWatcher.on(testDirectory, {excludes: ["some-folder/file3.js"]}, function(err, w) {
+          test.ifError(err); currentWatcher = w; next();
+        });
+      },
+      function(next) { setTimeout(next, 200); },
+      function(next) { fs.writeFile(path.join(testDirectory, 'newFile.txt'), 'fooo', next); },
+      function waitForChange(next) {
+        currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
+          if /*timeout*/(Date.now()-startTime > timeout) { test.ok(false, 'timeout when waiting for file changes to be found'); test.done(); }
+          else if /*no changes yet*/(!changes.length && !err) { console.log('waiting....'); setTimeout(waitForChange.bind(null, next), 200); }
+          else {
+            test.ifError(err);
+            test.equals(changes.length, 1, 'more then one change');
+            test.equals(changes[0].path, 'newFile.txt', 'path');
+            test.equals(changes[0].type, 'creation', 'type');
+            next();
+          }
+        });
+      },
+      function(next) {
+        currentWatcher.getWatchedFiles(function(err, files, watchState) {
+          test.ifError(err);
+          var expected = ['newFile.txt', 'file1.js', 'file2.js','some-folder', 'some-folder/file4.js', '.'];
+          assertAllIncluded(test, expected, files);
           next();
         });
       }

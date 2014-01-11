@@ -15,7 +15,7 @@
   "license": "MIT",
   "dependencies": {
     "async": "~0.2",
-    "watch": "~0.8"
+    "gaze": "~0.4.3"
   },
   "devDependencies": {
     "nodeunit": "~0.8",
