@@ -108,8 +108,10 @@ function startWatching(watchState, dir, options, thenDo) {
   var oldDir = process.cwd();
   process.chdir(dir);
 
+  var watchPattern = options.files ? options.files : "**";
+
   try {
-    gaze("**", function(err, gazer) {
+    gaze(watchPattern, function(err, gazer) {
       // 1. setup watch state
       var now = Date.now();
       util._extend(watchState, {
@@ -128,7 +130,7 @@ function startWatching(watchState, dir, options, thenDo) {
 
       // 2. register event listeners
       gazer.on('all'/*changed/added/deleted*/, function(evtType, filepath) {
-        if (ignore(dir, options.excludes, filepath)) return;
+        if (ignore(dir, options.excludes || [], filepath)) return;
         addChange(watchState, dir, gazerEventTranslation[evtType] || 'unknown', filepath, {});
       });
       gazer.on('ready', function(err) { log('READY?'); })
@@ -221,9 +223,6 @@ module.exports.onFiles = function(directory, files, options, thenDo) {
   // It would be better to directly use the gaze interface to start watching
   // only on the given files
   options = options || {};
-  options.excludes = options.excludes || [];
-  // exclude files not in `files`
-  options.excludes.push(function(file) {
-    return files.indexOf(file) === -1; });
+  options.files = files;
   module.exports.on(directory, options, thenDo);
 }

@@ -1,7 +1,7 @@
 {
   "name": "watch-interface",
   "version": "0.0.3",
-  "description": "Recursively gather file meta data starting at a root directory. When files change the meta data gets automatically updated. It is thin wrapper for 'watch' that takes care of file meta object housekeeping.",
+  "description": "Recursively gather file meta data starting at a root directory. An interface to other file watching libs (currently mainly gaze).",
   "main": "index.js",
   "scripts": {
     "test": "node_modules/nodeunit/bin/nodeunit tests/test.js  --reporter minimal"
