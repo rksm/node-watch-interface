@@ -1,6 +1,6 @@
 {
   "name": "watch-interface",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "description": "Recursively gather file meta data starting at a root directory. An interface to other file watching libs (currently mainly gaze).",
   "main": "index.js",
   "scripts": {
@@ -14,8 +14,8 @@
   "author": "Robert Krahn",
   "license": "MIT",
   "dependencies": {
-    "async": "~0.2",
-    "gaze": "~0.4.3"
+    "async": "~0.9",
+    "gaze": "~0.6.4"
   },
   "devDependencies": {
     "nodeunit": "~0.8",

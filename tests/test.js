@@ -1,3 +1,5 @@
+/*global require,__dirname,setTimeout*/
+
 var path          = require("path"),
     fs            = require("fs"),
     async         = require("async"),
@@ -67,11 +69,20 @@ var tests = {
     ], callback);
   },
 
+  testDumb: function(test) {
+    setTimeout(function() {
+      fileWatcher.on(".", {}, function(err, watcher) {
+        test.done();
+      });
+    }, 100);
+  },
+
   testStartWatchingAndRetrieveFileInfos: function(test) {
     fileWatcher.on(testDirectory, {excludes: ["some-folder/file3.js"]}, function(err, watcher) {
       currentWatcher = watcher;
       test.ifError(err);
       watcher.getWatchedFiles(function(err, files, startTime) {
+        console.log(files);
         var expected = ['file1.js', 'file2.js','some-folder', 'some-folder/file4.js', '.'];
         assertAllIncluded(test, expected, files);
         test.done();
@@ -119,8 +130,10 @@ var tests = {
           test.ifError(err); currentWatcher = w; next();
         });
       },
+
       function(next) { setTimeout(next, 200); },
       function(next) { fs.unlink(path.join(testDirectory, 'file1.js'), next); },
+
       function waitForChange(next) {
         currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
           if /*timeout*/(Date.now()-startTime > timeout) { test.ok(false, 'timeout when waiting for file changes to be found'); test.done(); }
@@ -134,6 +147,7 @@ var tests = {
           }
         });
       },
+
       function(next) {
         currentWatcher.getWatchedFiles(function(err, files, watchState) {
           test.ifError(err);
@@ -187,23 +201,27 @@ var tests = {
           test.ifError(err); currentWatcher = w; next(); });
       },
       await(100),
+
       // 1. ignore changes to non watched files
       function(next) { fs.writeFile(path.join(testDirectory, 'file2.js'), 'fooo', next); },
       await(300),
       function waitForChange(next) {
         currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
           test.ifError(err);
-          test.equals(changes.length, 0, 'change to non watched file observed?');
+          var nonCreationChanges = changes.filter(function(ea) { return ea.type !== "creation"; });
+          test.equals(nonCreationChanges.length, 0, 'change to non watched file observed?');
           next();
         });
       },
+
       // 2. Changes to watched files should be picked up
       function(next) { fs.writeFile(path.join(testDirectory, 'file1.js'), 'fooo', next); },
       await(300),
       function waitForChange(next) {
         currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
           test.ifError(err);
-          test.equals(changes.length, 1, 'change to watched file not observed?');
+          var nonCreationChanges = changes.filter(function(ea) { return ea.type !== "creation"; });
+          test.equals(nonCreationChanges.length, 1, 'change to watched file not observed?');
           next();
         });
       },
@@ -213,13 +231,14 @@ var tests = {
       function waitForChange(next) {
         currentWatcher.getChangesSince(startTime, function(err, changes, watchState) {
           test.ifError(err);
-          test.equals(changes.length, 1, 'change of newly added file not ignored?');
+          var nonCreationChanges = changes.filter(function(ea) { return ea.type !== "creation"; });
+          test.equals(nonCreationChanges.length, 1, 'change of newly added file not ignored?');
           next();
         });
       },
     ], test.done);
     
-},
+  }
 
 };
 

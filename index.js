@@ -1,7 +1,6 @@
 var path  = require("path");
 var util  = require("util");
 var gaze  = require("gaze");
-
 var debug = true;
 
 function log(/*args*/) {
@@ -59,18 +58,20 @@ function withGazerFileNamesDo(gazer, dir, makeRelative, thenDo) {
   //                   '/foo/test-dir/': [
   //                       '/foo/test-dir/a.txt',
   //                       '/foo/test-dir/b.txt'],
-  var gazerFiles = gazer.watched(),
-      dirs = Object.getOwnPropertyNames(gazerFiles),
-      makeRelativeFunc = relativePath.bind(null, dir);
-  var files = uniq(dirs.reduce(function(files, key) {
-    // ignore parent directories
-    if (key.indexOf(dir) !== 0) return files;
-    var filesInDir = gazerFiles[key].map(noLastSlash),
-        dirName = noLastSlash(key);
-    return files.concat([dirName]).concat(filesInDir)
-  }, []));
-  if (makeRelative) files = files.map(makeRelativeFunc);
-  thenDo(null, files);
+  gazer.watched(function(err, gazerFiles) {
+    if (err) { thenDo(err, null); return; }
+    var dirs = Object.getOwnPropertyNames(gazerFiles),
+        makeRelativeFunc = relativePath.bind(null, dir);
+    var files = uniq(dirs.reduce(function(files, key) {
+      // ignore parent directories
+      if (key.indexOf(dir) !== 0) return files;
+      var filesInDir = gazerFiles[key].map(noLastSlash),
+          dirName = noLastSlash(key);
+      return files.concat([dirName]).concat(filesInDir)
+    }, []));
+    if (makeRelative) files = files.map(makeRelativeFunc);
+    thenDo(null, files);
+  });
 }
 
 // gazer event name -> our event name
@@ -118,13 +119,14 @@ function startWatching(watchState, dir, options, thenDo) {
         startTime: now, lastChange: now,
         monitor: gazer,
         removeFileChangeListeners: function(thenDo) {
-          gazer.close();
-          watchState.monitor = null;
+          log('File watcher on %s closing', dir);
+          watchState.removeFileChangeListeners = function(cb) { cb && cb(); }
           gazer.on('end', function() {
             log('File watcher on %s closed', dir);
             thenDo && setTimeout(thenDo, 600);
           });
-          watchState.removeFileChangeListeners = function(cb) { cb && cb(); }
+          gazer.close();
+          watchState.monitor = null;
         }
       });
 
@@ -135,13 +137,13 @@ function startWatching(watchState, dir, options, thenDo) {
       });
       gazer.on('ready', function(err) { log('READY?'); })
       gazer.on('error', function(err) {
-        log('File watcher error on %s:\n%s', dir, err);
+        console.error('File watcher error on %s:\n%s', dir, err);
       });
 
       // 3. setup ignores
       setTimeout(function() {
         gazerIgnore(gazer, dir, options.excludes || []);
-        setTimeout(thenDo.bind(null, null, watchState), 100);
+        setTimeout(thenDo.bind(null, null, watchState), 1000);
       }, 300);
     });
   } catch (e) { thenDo(e); } finally { process.chdir(oldDir); }
@@ -200,6 +202,7 @@ var watchStates = module.exports.watchStates = {/*dir -> watchstate*/}
 
 module.exports.on = function(directory, options, thenDo) {
   getWatchedFiles(watchStates[directory], directory, options, function(err, fileSpec, watchState) {
+    watchStates[directory] = watchState;
     var watcher = {
       state: watchState,
       getWatchedFiles: function(callback) {
@@ -226,3 +229,5 @@ module.exports.onFiles = function(directory, files, options, thenDo) {
   options.files = files;
   module.exports.on(directory, options, thenDo);
 }
+
+module.exports.watchStates = watchStates;
