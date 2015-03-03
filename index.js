@@ -1,7 +1,7 @@
 var path  = require("path");
 var util  = require("util");
 var gaze  = require("gaze");
-var debug = true;
+var debug = false;
 
 function log(/*args*/) {
   if (debug) console.log.apply(console, arguments);
@@ -29,7 +29,7 @@ function ignore(baseDirectory, ignoredItems, fullName) {
 function addChange(watchState, baseDirectory, type, fullFileName, stat) {
   log('change recorded: %s to %s -- %s', type, fullFileName, Date.now());
   var fileName = path.relative(baseDirectory, fullFileName);
-  watchState.lastChange = Date.now()
+  watchState.lastChange = Date.now();
   watchState.changeList.unshift({
     time: watchState.lastChange,
     path: fileName,
@@ -66,7 +66,7 @@ function withGazerFileNamesDo(gazer, dir, makeRelative, thenDo) {
     if (key.indexOf(dir) !== 0) return files;
     var filesInDir = gazerFiles[key].map(noLastSlash),
         dirName = noLastSlash(key);
-    return files.concat([dirName]).concat(filesInDir)
+    return files.concat([dirName]).concat(filesInDir);
   }, []));
   if (makeRelative) files = files.map(makeRelativeFunc);
   thenDo(null, files);
