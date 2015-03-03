@@ -58,20 +58,18 @@ function withGazerFileNamesDo(gazer, dir, makeRelative, thenDo) {
   //                   '/foo/test-dir/': [
   //                       '/foo/test-dir/a.txt',
   //                       '/foo/test-dir/b.txt'],
-  gazer.watched(function(err, gazerFiles) {
-    if (err) { thenDo(err, null); return; }
-    var dirs = Object.getOwnPropertyNames(gazerFiles),
-        makeRelativeFunc = relativePath.bind(null, dir);
-    var files = uniq(dirs.reduce(function(files, key) {
-      // ignore parent directories
-      if (key.indexOf(dir) !== 0) return files;
-      var filesInDir = gazerFiles[key].map(noLastSlash),
-          dirName = noLastSlash(key);
-      return files.concat([dirName]).concat(filesInDir)
-    }, []));
-    if (makeRelative) files = files.map(makeRelativeFunc);
-    thenDo(null, files);
-  });
+  var gazerFiles = gazer.watched(),
+      dirs = Object.getOwnPropertyNames(gazerFiles),
+      makeRelativeFunc = relativePath.bind(null, dir);
+  var files = uniq(dirs.reduce(function(files, key) {
+    // ignore parent directories
+    if (key.indexOf(dir) !== 0) return files;
+    var filesInDir = gazerFiles[key].map(noLastSlash),
+        dirName = noLastSlash(key);
+    return files.concat([dirName]).concat(filesInDir)
+  }, []));
+  if (makeRelative) files = files.map(makeRelativeFunc);
+  thenDo(null, files);
 }
 
 // gazer event name -> our event name
