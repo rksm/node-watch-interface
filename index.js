@@ -1,7 +1,9 @@
-var path  = require("path");
-var util  = require("util");
-var watchUtil  = require("./lib/util");
-
+var path      = require("path");
+var fs        = require("fs");
+var util      = require("util");
+var lang      = require("lively.lang");
+var chokidar  = require("chokidar");
+var watchUtil = require("./lib/util");
 
 var log = watchUtil.log;
 log.debug = true;
@@ -22,10 +24,11 @@ function ignore(baseDirectory, ignoredItems, fullName) {
   return false;
 }
 
-function addChange(watchState, baseDirectory, type, fullFileName, stat) {
+function addChange(options, watchState, baseDirectory, type, fullFileName, stat) {
   log('change recorded: %s to %s -- %s', type, fullFileName, Date.now());
   var fileName = path.relative(baseDirectory, fullFileName);
-  watchState.lastChange = Date.now()
+  if (options.files && options.files.indexOf(fileName) === -1) return;
+  watchState.lastChange = Date.now();
   watchState.changeList.unshift({
     time: watchState.lastChange,
     path: fileName,
@@ -34,41 +37,43 @@ function addChange(watchState, baseDirectory, type, fullFileName, stat) {
   });
 }
 
-function withGazerFileNamesDo(gazer, dir, makeRelative, thenDo) {
+function withChokidarFileNamesDo(chokidar, baseDir, makeRelative, thenDo) {
   // returns array with file and dir names
   // gazerFiles like { '/foo/test-dir': [],
   //                   '/foo/test-dir/': [
   //                       '/foo/test-dir/a.txt',
   //                       '/foo/test-dir/b.txt'],
-  gazer.watched(function(err, gazerFiles) {
-    if (err) { thenDo(err, null); return; }
-    var dirs = Object.getOwnPropertyNames(gazerFiles),
-        makeRelativeFunc = relativePath.bind(null, dir);
-    var files = uniq(dirs.reduce(function(files, key) {
-      // ignore parent directories
-      if (key.indexOf(dir) !== 0) return files;
-      var filesInDir = gazerFiles[key].map(noLastSlash),
-          dirName = noLastSlash(key);
-      return files.concat([dirName]).concat(filesInDir)
-    }, []));
-    if (makeRelative) files = files.map(makeRelativeFunc);
-    thenDo(null, files);
-  });
+
+  baseDir = watchUtil.noLastSlash(path.normalize(baseDir));
+
+  var files = Object.keys(chokidar._watched)
+    .map(watchUtil.noLastSlash)
+    .filter(function(ea) { return baseDir.indexOf(ea) === -1 || (baseDir.indexOf(ea) === 0 && ea.length >= baseDir.length); })
+    .reduce(function(all, dir) {
+      return all.concat(chokidar._watched[dir].children()
+        .map(function(ea) { return path.join(dir, ea); })
+        .concat([dir + "/"]))
+    }, []);
+
+  // remove directories that are included without slash
+  var dirsNoSlash = files
+    .filter(function(ea) { return ea[ea.length-1] === "/"; })
+    .map(function(ea) { return ea.slice(0, -1); })
+
+  var normalized = files
+    .filter(function(ea) { return dirsNoSlash.indexOf(ea) === -1; })
+    .sort();
+
+  if (makeRelative) normalized = normalized.map(relativePath.bind(null, baseDir));
+  thenDo(null, normalized);
 }
 
-// gazer event name -> our event name
-var gazerEventTranslation = {
-  added: 'creation',
-  deleted: 'removal',
-  changed: 'change'
-}
-
-function gazerIgnore(gazer, dir, excluded, thenDo) {
-  withGazerFileNamesDo(gazer, dir, false, function(err, fileNames) {
-    if (err) { console.error(String(err)); return; }
-    fileNames
+function chokidarIgnore(watcher, dir, excluded, thenDo) {
+  withChokidarFileNamesDo(watcher, dir, false, function(err, filenames) {
+    if (err) { console.error(String(err)); return thenDo(err); }
+    filenames
       .filter(ignore.bind(null, dir, excluded))
-      .forEach(function(fn) { gazer.remove(fn); });
+      .forEach(function(fn) { watcher.unwatch(fn); });
     thenDo && thenDo(null);
   });
 }
@@ -82,53 +87,70 @@ function startWatching(watchState, dir, options, thenDo) {
   // }
   // setup to watch all files, ignores done via excludes (items can be strings
   // that should match the relative watched path, regexps, or functions)
-  if (!require("fs").existsSync(dir)) {
-    thenDo(new Error ('Requsted to watch directory '
+  if (!fs.existsSync(dir)) {
+    thenDo(new Error ('Requested to watch directory '
                      + dir + ' but this directory does not exist!'));
     return;
   }
 
-  var oldDir = process.cwd();
-  process.chdir(dir);
-
-  var watchPattern = options.files ? options.files : "**";
+  thenDo = lang.fun.once(thenDo || function() {});
 
   try {
-    gaze(watchPattern, function(err, gazer) {
-      // 1. setup watch state
-      var now = Date.now();
-      util._extend(watchState, {
-        startTime: now, lastChange: now,
-        monitor: gazer,
-        removeFileChangeListeners: function(thenDo) {
-          log('File watcher on %s closing', dir);
-          watchState.removeFileChangeListeners = function(cb) { cb && cb(); }
-          gazer.on('end', function() {
-            log('File watcher on %s closed', dir);
-            thenDo && setTimeout(thenDo, 600);
-          });
-          gazer.close();
-          watchState.monitor = null;
-        }
-      });
 
-      // 2. register event listeners
-      gazer.on('all'/*changed/added/deleted*/, function(evtType, filepath) {
-        if (ignore(dir, options.excludes || [], filepath)) return;
-        addChange(watchState, dir, gazerEventTranslation[evtType] || 'unknown', filepath, {});
-      });
-      gazer.on('ready', function(err) { log('READY?'); })
-      gazer.on('error', function(err) {
-        console.error('File watcher error on %s:\n%s', dir, err);
-      });
-
-      // 3. setup ignores
-      setTimeout(function() {
-        gazerIgnore(gazer, dir, options.excludes || []);
-        setTimeout(thenDo.bind(null, null, watchState), 1000);
-      }, 300);
+    var watcher = chokidar.watch(dir, {
+      persistent: true,
+      // ignored: options.files ? function(path) {
+      //   if (path.indexOf(dir) === 0) path = path.slice(dir.length, path.length);
+      //   var ignored = path === "." || path === dir ?
+      //     false : options.files.indexOf(path) === -1;
+      //   log("IGNORED? %s => %s", path, ignored);
+      //   return ignored;
+      // } : undefined
     });
-  } catch (e) { thenDo(e); } finally { process.chdir(oldDir); }
+
+    // if (options.files) watcher.add(options.files);
+
+    watcher
+      .on('error', function(error) { console.error('File watcher error on %s:\n%s', dir, error); })
+      .on('ready', function() {
+
+        watcher
+          .on('change',    function(path, stats) { addChange(options, watchState, dir, "change", path, stats); })
+          .on('add',       function(path, stats) { addChange(options, watchState, dir, "creation", path, stats); })
+          .on('addDir',    function(path, stats) { addChange(options, watchState, dir, "creation", path, stats); })
+          .on('unlink',    function(path) { addChange(options, watchState, dir, "removal", path, {}); })
+          .on('unlinkDir', function(path) { addChange(options, watchState, dir, "removal", path, {}); });
+
+        log('READY');
+
+        // 1. setup watch state
+        var now = Date.now();
+        util._extend(watchState, {
+          startTime: now, lastChange: now,
+          monitor: watcher,
+          removeFileChangeListeners: function(thenDo) {
+            log('File watcher on %s closing', dir);
+            watchState.removeFileChangeListeners = function(cb) { cb && cb(); }
+            try {
+              watcher.close();
+              watchState.monitor = null;
+              thenDo && setTimeout(thenDo, 100);
+            } catch (e) {
+              console.error(e);
+              thenDo && thenDo(e);
+            }
+          }
+        });
+
+        // 2. setup ignores
+        lang.fun.composeAsync(
+          function(n) { setTimeout(n, 100); },
+          function(n) { chokidarIgnore(watcher, dir, options.excludes || [], n); },
+          function(n) { setTimeout(n, 100); }
+        )(function(err) { thenDo(err, watchState); });
+      });
+
+  } catch (e) { thenDo(e); }
 }
 
 function createWatchState() {
@@ -163,17 +185,9 @@ function getChangesSince(watchState, dir, options, timestampSince, timestampStar
   });
 }
 
-function makeMonitorFilesRelative(baseDirectory, fullPaths) {
-    return fullPaths.map(function(fullPath) {
-      var rel = path.relative(baseDirectory, fullPath);
-      if (rel === '') rel = '.';
-      return rel;
-    });
-}
-
 function getWatchedFiles(watchState, dir, options, thenDo) {
   ensureWatchState(watchState, dir, options, function(err, watchState) {
-    withGazerFileNamesDo(watchState.monitor, dir, true, function(err, fileNames) {
+    withChokidarFileNamesDo(watchState.monitor, dir, true, function(err, fileNames) {
         thenDo(err, fileNames, watchState);
     });
   });

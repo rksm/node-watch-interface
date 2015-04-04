@@ -1,6 +1,6 @@
 {
   "name": "watch-interface",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Recursively gather file meta data starting at a root directory. An interface to other file watching libs (currently mainly chokidar).",
   "main": "index.js",
   "scripts": {
@@ -15,7 +15,8 @@
   "license": "MIT",
   "dependencies": {
     "async": "~0.9",
-    "chokidar": "^1.0.0-rc5"
+    "chokidar": "^1.0.0-rc5",
+    "lively.lang": "^0.4.1"
   },
   "devDependencies": {
     "nodeunit": "~0.8",

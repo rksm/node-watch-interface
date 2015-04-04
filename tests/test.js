@@ -72,6 +72,7 @@ var tests = {
   testDumb: function(test) {
     setTimeout(function() {
       fileWatcher.on(".", {}, function(err, watcher) {
+        currentWatcher = watcher;
         test.done();
       });
     }, 100);
@@ -82,7 +83,6 @@ var tests = {
       currentWatcher = watcher;
       test.ifError(err);
       watcher.getWatchedFiles(function(err, files, startTime) {
-        console.log(files);
         var expected = ['file1.js', 'file2.js','some-folder', 'some-folder/file4.js', '.'];
         assertAllIncluded(test, expected, files);
         test.done();
@@ -225,6 +225,7 @@ var tests = {
           next();
         });
       },
+
       // 3. Newly added files should be ignored
       function(next) { fs.writeFile(path.join(testDirectory, 'file3.js'), 'fooo', next); },
       await(300),
@@ -235,9 +236,10 @@ var tests = {
           test.equals(nonCreationChanges.length, 1, 'change of newly added file not ignored?');
           next();
         });
-      },
+      }
+
     ], test.done);
-    
+
   }
 
 };
