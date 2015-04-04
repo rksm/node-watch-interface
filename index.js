@@ -1,18 +1,14 @@
 var path  = require("path");
 var util  = require("util");
-var gaze  = require("gaze");
-var debug = true;
+var watchUtil  = require("./lib/util");
 
-function log(/*args*/) {
-  if (debug) console.log.apply(console, arguments);
-}
 
-function uniq(arr) {
-  return arr.reduce(function(all, ea) {
-    if (all.indexOf(ea) === -1) all.push(ea);
-    return all;
-  }, []);
-}
+var log = watchUtil.log;
+log.debug = true;
+
+var relativePath = watchUtil.relativePath;
+var noLastSlash = watchUtil.noLastSlash;
+var uniq = watchUtil.uniq;
 
 function ignore(baseDirectory, ignoredItems, fullName) {
   // fullPath is String, absolute path to file or directory
@@ -36,20 +32,6 @@ function addChange(watchState, baseDirectory, type, fullFileName, stat) {
     type: type,
     stat: stat
   });
-}
-
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// gaze helpers
-function noLastSlash(name) {
-  var last = name[name.length-1];
-  return (last === '/' || last === '\\') ?
-    name.slice(0,-1) : name;
-}
-
-function relativePath(dir, fullPath) {
-  var rel = path.relative(dir, fullPath);
-  if (rel === '') rel = '.';
-  return rel;
 }
 
 function withGazerFileNamesDo(gazer, dir, makeRelative, thenDo) {

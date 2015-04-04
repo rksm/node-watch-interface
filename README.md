@@ -1,3 +1,7 @@
+https://www.npmjs.com/package/chokidar
+
+
+
 # watch-interface
 
 Recursively gather file meta data starting at a root directory. When files

@@ -1,7 +1,7 @@
 {
   "name": "watch-interface",
-  "version": "0.1.0",
-  "description": "Recursively gather file meta data starting at a root directory. An interface to other file watching libs (currently mainly gaze).",
+  "version": "0.2.0",
+  "description": "Recursively gather file meta data starting at a root directory. An interface to other file watching libs (currently mainly chokidar).",
   "main": "index.js",
   "scripts": {
     "test": "node_modules/nodeunit/bin/nodeunit tests/test.js  --reporter minimal"
@@ -15,7 +15,7 @@
   "license": "MIT",
   "dependencies": {
     "async": "~0.9",
-    "gaze": "~0.6.4"
+    "chokidar": "^1.0.0-rc5"
   },
   "devDependencies": {
     "nodeunit": "~0.8",
