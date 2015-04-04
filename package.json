@@ -1,6 +1,6 @@
 {
   "name": "watch-interface",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Recursively gather file meta data starting at a root directory. An interface to other file watching libs (currently mainly chokidar).",
   "main": "index.js",
   "scripts": {

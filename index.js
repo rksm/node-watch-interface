@@ -83,7 +83,7 @@ function startWatching(watchState, dir, options, thenDo) {
   options = options || {}
   // var watchOptions = {
   //   ignoreDotFiles: options.ignoreDotFiles || false,
-  //   filter: ignore.bind(null, dir, options.excludes || [])
+  //   excludes: [....]
   // }
   // setup to watch all files, ignores done via excludes (items can be strings
   // that should match the relative watched path, regexps, or functions)
@@ -99,13 +99,7 @@ function startWatching(watchState, dir, options, thenDo) {
 
     var watcher = chokidar.watch(dir, {
       persistent: true,
-      // ignored: options.files ? function(path) {
-      //   if (path.indexOf(dir) === 0) path = path.slice(dir.length, path.length);
-      //   var ignored = path === "." || path === dir ?
-      //     false : options.files.indexOf(path) === -1;
-      //   log("IGNORED? %s => %s", path, ignored);
-      //   return ignored;
-      // } : undefined
+      ignored: function(path) { return ignore(dir, options.excludes || [], path); }
     });
 
     // if (options.files) watcher.add(options.files);
@@ -199,7 +193,7 @@ var watchStates = module.exports.watchStates = {/*dir -> watchstate*/}
 module.exports.on = function(directory, options, thenDo) {
   getWatchedFiles(watchStates[directory], directory, options, function(err, fileSpec, watchState) {
     watchStates[directory] = watchState;
-    var watcher = {
+    util._extend(watchState, {
       state: watchState,
       getWatchedFiles: function(callback) {
         getWatchedFiles(watchState, directory, options, callback);
@@ -211,8 +205,8 @@ module.exports.on = function(directory, options, thenDo) {
         delete watchStates[directory];
         watchState.removeFileChangeListeners(thenDo);
       }
-    }
-    thenDo(err, watcher);
+    })
+    thenDo(err, watchState);
   });
 }
 
